@@ -5048,16 +5048,47 @@ function exportTaskListXlsx() {
 
 function createSimplePdf(lines) {
   const encoder = new TextEncoder();
+  const safeLines = (lines.length ? lines : ["Rapor için kayıt bulunamadı."]).map((line) => String(line ?? ""));
+  const title = safeLines[0] || "ESH Raporu";
+  const bodyLines = safeLines.slice(1);
+  const preparedLines = [];
+  bodyLines.forEach((line) => {
+    if (!line.trim()) {
+      preparedLines.push("");
+      return;
+    }
+    preparedLines.push(...wrapPdfLine(line, 94));
+  });
   const pageChunks = [];
-  const safeLines = lines.length ? lines : ["Rapor için kayıt bulunamadı."];
-  for (let i = 0; i < safeLines.length; i += 42) pageChunks.push(safeLines.slice(i, i + 42));
+  for (let i = 0; i < preparedLines.length; i += 34) pageChunks.push(preparedLines.slice(i, i + 34));
+  if (!pageChunks.length) pageChunks.push([]);
+
   const objects = ["%PDF-1.4\n"];
   const pages = [];
   pageChunks.forEach((chunk, index) => {
     const contentId = 4 + index * 2;
     const pageId = 5 + index * 2;
     pages.push(pageId);
-    const text = chunk.map((line, lineIndex) => `BT /F1 10 Tf 42 ${800 - lineIndex * 18} Td <${pdfHexEncode(line).slice(0, 220)}> Tj ET`).join("\n");
+    const commands = [
+      "q 0.93 0.97 1 rg 36 790 523 34 re f Q",
+      "q 0.11 0.44 0.56 rg 36 790 5 34 re f Q",
+      `BT /F1 14 Tf 48 811 Td <${pdfHexEncode(title).slice(0, 260)}> Tj ET`,
+      `BT /F1 8 Tf 430 812 Td <${pdfHexEncode(`Oluşturma: ${new Date().toLocaleString("tr-TR")}`)}> Tj ET`,
+      "q 0.82 0.86 0.90 RG 36 770 523 0.5 re S Q"
+    ];
+    chunk.forEach((line, lineIndex) => {
+      const y = 748 - lineIndex * 19;
+      if (!line.trim()) {
+        commands.push(`q 0.90 0.93 0.96 RG 42 ${y + 6} 511 0.4 re S Q`);
+        return;
+      }
+      const isSection = line.length < 64 && !line.includes("|") && (line.endsWith(":") || line === line.toLocaleUpperCase("tr"));
+      commands.push(`BT /F1 ${isSection ? 11 : 9} Tf 42 ${y} Td <${pdfHexEncode(line).slice(0, 360)}> Tj ET`);
+    });
+    commands.push("q 0.82 0.86 0.90 RG 36 42 523 0.5 re S Q");
+    commands.push(`BT /F1 8 Tf 42 28 Td <${pdfHexEncode("Evde Sağlık İş Akışı ve Görev Takip Sistemi")}> Tj ET`);
+    commands.push(`BT /F1 8 Tf 500 28 Td <${pdfHexEncode(`${index + 1}/${pageChunks.length}`)}> Tj ET`);
+    const text = commands.join("\n");
     objects[contentId] = `${contentId} 0 obj\n<< /Length ${encoder.encode(text).length} >>\nstream\n${text}\nendstream\nendobj\n`;
     objects[pageId] = `${pageId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>\nendobj\n`;
   });
@@ -5078,6 +5109,25 @@ function createSimplePdf(lines) {
   }
   body += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
   return encoder.encode(body);
+}
+
+function wrapPdfLine(line, maxLength = 94) {
+  if (line.length <= maxLength) return [line];
+  const parts = [];
+  let current = "";
+  line.split(/\s+/).forEach((word) => {
+    if (!current) {
+      current = word;
+      return;
+    }
+    if (`${current} ${word}`.length <= maxLength) current += ` ${word}`;
+    else {
+      parts.push(current);
+      current = word;
+    }
+  });
+  if (current) parts.push(current);
+  return parts.length ? parts : [line.slice(0, maxLength)];
 }
 
 function createXlsx(table) {
