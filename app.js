@@ -610,7 +610,7 @@ function audit(action, details = "") {
     actorEmail: currentUserEmail(),
     actorUid: firebaseSync.user?.uid || ""
   });
-  state.audit = state.audit.slice(0, 250);
+  state.audit = state.audit.slice(0, 1000);
   auditRecordedSinceLastSave = true;
 }
 
@@ -1740,6 +1740,8 @@ function bindEvents() {
   $("closeAuditLogDialogBtn").addEventListener("click", () => $("auditLogDialog").close());
   $("applyAuditLogRangeBtn").addEventListener("click", renderAuditLogRange);
   $("deleteAuditLogRangeBtn").addEventListener("click", deleteAuditLogRange);
+  $("exportAuditLogPdfBtn").addEventListener("click", exportAuditLogPdf);
+  $("exportAuditLogXlsxBtn").addEventListener("click", exportAuditLogXlsx);
   $("commonThemeLightBtn").addEventListener("click", () => setCommonThemeMode("light"));
   $("commonThemeDarkBtn").addEventListener("click", () => setCommonThemeMode("dark"));
   $("saveUserNicknameBtn").addEventListener("click", saveUserNickname);
@@ -2577,6 +2579,41 @@ function deleteAuditLogRange() {
   saveState();
   renderAudit();
   renderAuditLogRange();
+}
+
+function exportAuditLogPdf() {
+  if (firebaseConfig().enabled && firebaseSync.workspaceRole !== "admin") return alert("Log kaydını yalnızca admin rolündeki kullanıcılar dışa aktarabilir.");
+  const start = $("auditLogStart").value || todayKey();
+  const end = $("auditLogEnd").value || start;
+  if (start > end) return alert("Başlangıç tarihi bitişten sonra olamaz.");
+  const rows = auditRowsInRange(start, end);
+  const lines = [
+    "ESH Log Kaydı",
+    `Aralık: ${formatDate(start)} - ${formatDate(end)}`,
+    `Toplam kayıt: ${rows.length}`,
+    "",
+    ...(rows.length ? rows.map((item) => `${new Date(item.at).toLocaleString("tr-TR")} | ${item.actorEmail || "Eski kayıt"} | ${item.action} | ${item.details || ""}`) : ["Seçili aralıkta kayıt yok."])
+  ];
+  downloadBlob(createSimplePdf(lines), `esh-log-kaydi-${start}-${end}.pdf`, "application/pdf");
+}
+
+function exportAuditLogXlsx() {
+  if (firebaseConfig().enabled && firebaseSync.workspaceRole !== "admin") return alert("Log kaydını yalnızca admin rolündeki kullanıcılar dışa aktarabilir.");
+  const start = $("auditLogStart").value || todayKey();
+  const end = $("auditLogEnd").value || start;
+  if (start > end) return alert("Başlangıç tarihi bitişten sonra olamaz.");
+  const rows = auditRowsInRange(start, end);
+  const table = [
+    ["Tarih", "İşlem", "Detay", "Kullanıcı", "UID"],
+    ...rows.map((item) => [
+      new Date(item.at).toLocaleString("tr-TR"),
+      item.action || "",
+      item.details || "",
+      item.actorEmail || "Eski kayıt",
+      item.actorUid || ""
+    ])
+  ];
+  downloadBlob(createXlsx(table), `esh-log-kaydi-${start}-${end}.xlsx`, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 }
 
 function currentPaperworkMonth() {
