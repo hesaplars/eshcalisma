@@ -4818,15 +4818,43 @@ async function encryptedBackup() {
 }
 
 async function encryptText(text, password) {
+  if (window.crypto?.subtle) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const iterations = 210000;
+    const key = await deriveBackupKey(password, salt, iterations);
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      key,
+      new TextEncoder().encode(text)
+    );
+    return {
+      encrypted: true,
+      method: "aes-gcm-pbkdf2",
+      iterations,
+      salt: bytesToBase64(salt),
+      iv: bytesToBase64(iv),
+      data: bytesToBase64(new Uint8Array(encrypted))
+    };
+  }
   const key = await hashPassword(password);
   let output = "";
   for (let i = 0; i < text.length; i += 1) {
     output += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
   }
-  return { encrypted: true, method: "local-xor", data: btoa(unescape(encodeURIComponent(output))) };
+  return { encrypted: true, method: "local-xor-legacy", data: btoa(unescape(encodeURIComponent(output))) };
 }
 
-async function decryptText(data, password) {
+async function decryptText(data, password, options = {}) {
+  if (options.method === "aes-gcm-pbkdf2") {
+    if (!window.crypto?.subtle) throw new Error("Bu tarayıcı AES-GCM yedek çözmeyi desteklemiyor.");
+    const salt = base64ToBytes(options.salt);
+    const iv = base64ToBytes(options.iv);
+    const encrypted = base64ToBytes(data);
+    const key = await deriveBackupKey(password, salt, Number(options.iterations) || 210000);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
+    return new TextDecoder().decode(plain);
+  }
   const key = await hashPassword(password);
   const raw = decodeURIComponent(escape(atob(data)));
   let output = "";
@@ -4834,6 +4862,36 @@ async function decryptText(data, password) {
     output += String.fromCharCode(raw.charCodeAt(i) ^ key.charCodeAt(i % key.length));
   }
   return output;
+}
+
+async function deriveBackupKey(password, salt, iterations) {
+  const material = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
+    material,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  bytes.forEach((byte) => binary += String.fromCharCode(byte));
+  return btoa(binary);
+}
+
+function base64ToBytes(value) {
+  const binary = atob(value || "");
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 function restoreJson(event) {
@@ -4847,7 +4905,7 @@ function restoreJson(event) {
       if (parsed.encrypted) {
         const password = $("backupPassword").value || prompt("Şifreli yedek şifresini gir:");
         if (!password) throw new Error("Şifre girilmedi.");
-        parsed = JSON.parse(await decryptText(parsed.data, password));
+        parsed = JSON.parse(await decryptText(parsed.data, password, parsed));
       }
       if (!Array.isArray(parsed.tasks)) throw new Error("Görev listesi bulunamadı.");
       const incoming = normalizeState({
