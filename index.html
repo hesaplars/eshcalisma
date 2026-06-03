@@ -84,6 +84,7 @@
           </div>
           <span class="workspace-indicator" id="workspaceIndicator">ORTAK ALAN</span>
           <div class="topbar-actions">
+            <button id="globalSearchBtn" type="button">Ara</button>
             <button id="quickNoteBtn">Hızlı Görev Ekle</button>
             <button class="primary-btn" id="quickAddBtn">Görev Ekle</button>
             <button id="simplifiedViewBtn" type="button">Sadeleşmiş Görünüm</button>
@@ -927,6 +928,26 @@
         </section>
       </main>
     </div>
+
+    <dialog id="globalSearchDialog">
+      <form method="dialog" class="dialog-card global-search-card">
+        <div class="dialog-head">
+          <h2>Arama Merkezi</h2>
+          <button type="button" id="closeGlobalSearchDialogBtn" class="icon-btn">×</button>
+        </div>
+        <input type="search" id="globalSearchInput" placeholder="Görev, not, evrak, personel veya gönderim ara..." autocomplete="off" />
+        <div class="search-filter-row">
+          <button type="button" class="tab-btn active" data-global-search-type="all">Tümü</button>
+          <button type="button" class="tab-btn" data-global-search-type="task">Görev</button>
+          <button type="button" class="tab-btn" data-global-search-type="note">Not</button>
+          <button type="button" class="tab-btn" data-global-search-type="paperwork">Evrak</button>
+          <button type="button" class="tab-btn" data-global-search-type="person">Personel</button>
+          <button type="button" class="tab-btn" data-global-search-type="dispatch">Gönderim</button>
+        </div>
+        <div id="globalSearchSummary" class="muted"></div>
+        <div id="globalSearchResults" class="compact-list global-search-results"></div>
+      </form>
+    </dialog>
 
     <dialog id="taskDialog">
       <form method="dialog" id="taskForm" class="dialog-card">

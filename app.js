@@ -176,6 +176,7 @@ let touchStartY = 0;
 let dashboardSummaryOpen = false;
 let taskFiltersOpen = false;
 let paperworkSummaryOpen = false;
+let globalSearchType = "all";
 let startupPreferenceApplied = false;
 let auditRecordedSinceLastSave = false;
 let navDragState = null;
@@ -1552,6 +1553,16 @@ function bindEvents() {
   $("summaryToggleBtn").addEventListener("click", toggleDashboardSummary);
   $("taskFilterToggleBtn").addEventListener("click", toggleTaskFilters);
   $("paperworkSummaryToggleBtn").addEventListener("click", togglePaperworkSummary);
+  $("globalSearchBtn").addEventListener("click", openGlobalSearchDialog);
+  $("closeGlobalSearchDialogBtn").addEventListener("click", () => $("globalSearchDialog").close());
+  $("globalSearchInput").addEventListener("input", renderGlobalSearch);
+  $("globalSearchResults").addEventListener("click", handleGlobalSearchResultClick);
+  document.querySelectorAll("[data-global-search-type]").forEach((button) => {
+    button.addEventListener("click", () => {
+      globalSearchType = button.dataset.globalSearchType || "all";
+      renderGlobalSearch();
+    });
+  });
   $("refreshPageBtn").addEventListener("click", refreshPage);
   $("closeMobileMenuBtn").addEventListener("click", closeMobileMenu);
   document.addEventListener("click", closeMobileMenuFromOverlay);
@@ -2009,6 +2020,221 @@ function setOptions(id, options) {
   const current = element.value;
   element.innerHTML = options.join("");
   if ([...element.options].some((option) => option.value === current)) element.value = current;
+}
+
+function openGlobalSearchDialog() {
+  if (activeWorkspace === "personal" && personalLocked()) {
+    renderPersonalGate();
+    return alert("Arama yapmak için kişisel alanın kilidini aç.");
+  }
+  globalSearchType = "all";
+  $("globalSearchInput").value = "";
+  renderGlobalSearch();
+  $("globalSearchDialog").showModal();
+  setTimeout(() => $("globalSearchInput")?.focus(), 50);
+}
+
+function renderGlobalSearch() {
+  if (!$("globalSearchResults")) return;
+  document.querySelectorAll("[data-global-search-type]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.globalSearchType === globalSearchType);
+  });
+  const query = $("globalSearchInput")?.value || "";
+  const needle = normalizeSearchText(query);
+  const sourceRows = globalSearchRows().filter((row) => globalSearchType === "all" || row.type === globalSearchType);
+  const rows = sourceRows.filter((row) => !needle || normalizeSearchText(row.searchText).includes(needle)).slice(0, 80);
+  $("globalSearchSummary").textContent = query.trim() ? `${rows.length} sonuç gösteriliyor` : `${sourceRows.length} kayıt içinde ara`;
+  $("globalSearchResults").innerHTML = rows.map(renderGlobalSearchRow).join("") || empty("Sonuç bulunamadı.");
+}
+
+function globalSearchRows() {
+  const rows = [];
+  const workspaceLabel = activeWorkspace === "personal" ? "Kişisel" : "Ortak";
+
+  state.tasks.forEach((task) => {
+    const date = task.specificDate || task.createdAt?.slice(0, 10) || activeDate;
+    rows.push({
+      type: "task",
+      id: task.id,
+      date,
+      badge: "Görev",
+      title: task.title,
+      meta: `${workspaceLabel} alan · ${frequencyLabel(task)} · ${task.category || "Kategori yok"} · ${personName(task.assigneeId)}`,
+      detail: task.description || priorityText(task.priority),
+      searchText: [
+        task.title,
+        task.description,
+        task.category,
+        personName(task.assigneeId),
+        priorityText(task.priority),
+        frequencyLabel(task),
+        ...(task.attachments || []).map((file) => file.name)
+      ].join(" ")
+    });
+  });
+
+  activeNotes().forEach((note) => {
+    rows.push({
+      type: "note",
+      id: note.id,
+      badge: "Not",
+      title: note.title || "Başlıksız not",
+      meta: `${workspaceLabel} alan · ${note.category || "Genel"} · ${new Date(note.updatedAt || note.createdAt).toLocaleString("tr-TR")}`,
+      detail: note.body,
+      searchText: [note.title, note.body, note.category].join(" ")
+    });
+  });
+
+  paperworkItems().forEach((item) => {
+    rows.push({
+      type: "paperwork",
+      id: item.id,
+      month: currentPaperworkMonth(),
+      badge: "Evrak",
+      title: item.title,
+      meta: `${workspaceLabel} alan · ${item.category || "Kategori yok"} · Son gün ${item.dueDay || "-"}`,
+      detail: item.description,
+      searchText: [item.title, item.category, item.description, ...(item.steps || [])].join(" ")
+    });
+  });
+
+  Object.entries(state.paperworkRecords || {}).forEach(([key, record]) => {
+    const [month, itemId] = key.split("::");
+    const item = state.paperworkItems.find((row) => row.id === itemId);
+    if (!item || (!record?.note && !record?.status)) return;
+    rows.push({
+      type: "paperwork",
+      id: itemId,
+      month,
+      badge: "Evrak",
+      title: `${item.title} (${month})`,
+      meta: `${workspaceLabel} alan · ${PAPERWORK_STATUS[record.status] || "Durum yok"}`,
+      detail: record.note,
+      searchText: [item.title, item.category, item.description, record.status, record.note].join(" ")
+    });
+  });
+
+  state.people.forEach((person) => {
+    rows.push({
+      type: "person",
+      id: person.id,
+      badge: "Personel",
+      title: person.name,
+      meta: `${person.role || "Personel"} · ${person.phone || "Telefon yok"} · ${person.email || "E-posta yok"}`,
+      detail: [person.certificate, person.certificateDate, person.note].filter(Boolean).join(" · "),
+      searchText: [person.name, person.role, person.tc, person.phone, person.email, person.certificate, person.certificateDate, person.note].join(" ")
+    });
+  });
+
+  state.dispatches.forEach((dispatch) => {
+    rows.push({
+      type: "dispatch",
+      id: dispatch.id,
+      month: dispatch.date?.slice(0, 7) || currentPaperworkMonth(),
+      badge: "Gönderim",
+      title: dispatch.subject,
+      meta: `${formatDate(dispatch.date)} · ${dispatch.target} · ${dispatch.status}`,
+      detail: `${dispatch.type}${dispatch.note ? ` · ${dispatch.note}` : ""}`,
+      searchText: [dispatch.date, dispatch.type, dispatch.target, dispatch.subject, dispatch.status, dispatch.note].join(" ")
+    });
+  });
+
+  if (activeWorkspace === "personal") {
+    personalState.todos.forEach((todo) => {
+      rows.push({
+        type: "task",
+        id: todo.id,
+        date: todo.dueDate,
+        personalTodo: true,
+        badge: "Kişisel İş",
+        title: todo.title,
+        meta: `${formatDate(todo.dueDate)} · ${priorityText(todo.priority)} · ${todo.done ? "Tamamlandı" : "Açık"}`,
+        detail: todo.note,
+        searchText: [todo.title, todo.note, todo.dueDate, priorityText(todo.priority)].join(" ")
+      });
+    });
+  }
+
+  return rows.sort((a, b) => String(a.title).localeCompare(String(b.title), "tr"));
+}
+
+function renderGlobalSearchRow(row) {
+  return `
+    <button type="button" class="global-search-item" data-result-type="${escapeAttr(row.type)}" data-result-id="${escapeAttr(row.id)}" data-result-date="${escapeAttr(row.date || "")}" data-result-month="${escapeAttr(row.month || "")}" data-personal-todo="${row.personalTodo ? "true" : "false"}">
+      <span class="badge">${escapeHtml(row.badge)}</span>
+      <span class="task-title">
+        <strong>${escapeHtml(row.title || "Başlıksız")}</strong>
+        <small>${escapeHtml(row.meta || "")}</small>
+        ${row.detail ? `<small>${escapeHtml(String(row.detail)).slice(0, 180)}</small>` : ""}
+      </span>
+    </button>
+  `;
+}
+
+function handleGlobalSearchResultClick(event) {
+  const item = event.target.closest("[data-result-type]");
+  if (!item) return;
+  goToGlobalSearchResult({
+    type: item.dataset.resultType,
+    id: item.dataset.resultId,
+    date: item.dataset.resultDate,
+    month: item.dataset.resultMonth,
+    personalTodo: item.dataset.personalTodo === "true"
+  });
+}
+
+function goToGlobalSearchResult(result) {
+  $("globalSearchDialog")?.close();
+  if (result.personalTodo) {
+    setWorkspaceScope("personal", "dashboard");
+    $("personalTodoDate").value = result.date || activeDate;
+    renderPersonalArea();
+    editPersonalTodo(result.id);
+    return;
+  }
+  if (result.type === "task") {
+    if (result.date) setActiveDate(result.date);
+    setWorkspaceScope(activeWorkspace, "dashboard");
+    return;
+  }
+  if (result.type === "note") {
+    setWorkspaceScope(activeWorkspace, "notes");
+    editNote(result.id);
+    return;
+  }
+  if (result.type === "paperwork") {
+    if (result.month) $("paperworkMonth").value = result.month;
+    paperworkTab = "tracking";
+    setWorkspaceScope(activeWorkspace, "paperwork");
+    renderPaperwork();
+    openPaperworkItemDialog(result.id);
+    return;
+  }
+  if (result.type === "dispatch") {
+    if (result.month) $("paperworkMonth").value = result.month;
+    paperworkTab = "dispatch";
+    setWorkspaceScope(activeWorkspace, "paperwork");
+    renderPaperwork();
+    return;
+  }
+  if (result.type === "person") {
+    setWorkspaceScope(activeWorkspace, "people");
+    editPerson(result.id);
+  }
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .toLocaleLowerCase("tr")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replaceAll("ı", "i")
+    .replaceAll("İ", "i")
+    .replaceAll("ğ", "g")
+    .replaceAll("ü", "u")
+    .replaceAll("ş", "s")
+    .replaceAll("ö", "o")
+    .replaceAll("ç", "c");
 }
 
 function renderDashboard() {
