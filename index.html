@@ -1,0 +1,1144 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Evde Sağlık İş Akışı ve Görev Takip Sistemi</title>
+    <meta name="theme-color" content="#102333" />
+    <!-- Sayfa beyaz yanıp sönmeden (FOUC) önlemek için tema anında uygulanır -->
+    <script>
+      (function () {
+        try {
+          var t = JSON.parse(localStorage.getItem("esh-theme-cache") || "null");
+          if (t && t.mode === "dark") {
+            document.documentElement.dataset.theme = "dark";
+            if (t.brand) document.documentElement.style.setProperty("--brand", t.brand);
+            if (t.brandDark) document.documentElement.style.setProperty("--brand-dark", t.brandDark);
+          }
+        } catch (_) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="style.css" />
+    <script>
+      if (location.protocol !== "file:") {
+        const manifest = document.createElement("link");
+        manifest.rel = "manifest";
+        manifest.href = "manifest.webmanifest";
+        document.head.appendChild(manifest);
+      }
+    </script>
+  </head>
+  <body>
+    <section class="login-screen" id="firebaseLoginScreen">
+      <form class="login-card" id="firebaseLoginForm">
+        <span class="brand-mark">ES</span>
+        <div>
+          <p class="eyebrow">Güvenli giriş</p>
+          <h1>Evde Sağlık İş Takibi</h1>
+          <p class="muted">Yetkili kullanıcı hesabınla giriş yap.</p>
+        </div>
+        <label>E-posta <input type="email" id="firebaseEmail" autocomplete="email" required /></label>
+        <label>Şifre <input type="password" id="firebasePassword" autocomplete="current-password" required /></label>
+        <p class="muted" id="firebaseLoginMessage"></p>
+        <button type="submit" class="primary-btn">Giriş Yap</button>
+      </form>
+    </section>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <button id="brandHomeBtn" class="brand-mark brand-home-btn" type="button" aria-label="Ana sayfaya git" title="Ana sayfaya git">ES</button>
+          <div>
+            <strong>Evde Sağlık</strong>
+            <small>İş Akışı ve Görev Takibi</small>
+            <small id="sidebarUserEmail" class="sidebar-user-email">Giriş bekleniyor</small>
+          </div>
+          <button id="refreshPageBtn" class="refresh-page-btn" type="button" aria-label="Sayfayı yenile" title="Sayfayı yenile">↻</button>
+          <button id="closeMobileMenuBtn" class="close-mobile-menu-btn" type="button" aria-label="Menüyü kapat">×</button>
+        </div>
+        <div class="workspace-switcher" id="workspaceSwitcher">
+          <button class="ws-btn active" data-workspace="common" type="button">Ortak Alan</button>
+          <button class="ws-btn" data-workspace="personal" type="button">Kişisel Alan</button>
+        </div>
+        <nav class="nav">
+          <button class="nav-btn active" data-view="dashboard">Ana Sayfa</button>
+          <button class="nav-btn" data-view="notes">Notlar</button>
+          <button class="nav-btn" data-view="tasks">Görevler</button>
+          <button class="nav-btn" data-view="paperwork">Evrak</button>
+          <button class="nav-btn" data-view="calendar">Takvim</button>
+          <button class="nav-btn" data-view="people">Personel</button>
+          <button class="nav-btn" data-view="templates">Şablonlar</button>
+          <button class="nav-btn" data-view="reports">Raporlar</button>
+          <button class="nav-btn" data-view="appearance">Görünüm & Tercihler</button>
+          <button class="nav-btn" data-view="settings">Ayarlar</button>
+          <button class="nav-btn" data-view="help">Yardım</button>
+          <button id="firebaseLogoutBtn" class="nav-logout-btn danger-btn" type="button">🚪 Çıkış Yap</button>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <button id="mobileMenuBtn" class="mobile-menu-btn" type="button" aria-label="Menüyü aç/kapat" aria-expanded="false">☰</button>
+            <p class="eyebrow" id="todayLabel"></p>
+            <h1 id="viewTitle">Ortak Alan</h1>
+          </div>
+          <span class="workspace-indicator" id="workspaceIndicator">ORTAK ALAN</span>
+          <div class="topbar-actions">
+            <button id="quickNoteBtn">Hızlı Görev Ekle</button>
+            <button class="primary-btn" id="quickAddBtn">Görev Ekle</button>
+            <button id="simplifiedViewBtn" type="button">Sadeleşmiş Görünüm</button>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboardView">
+          <button id="summaryToggleBtn" class="summary-toggle-btn" type="button" aria-expanded="false">Özet</button>
+          <div class="stats-grid">
+            <article class="stat-card">
+              <span>Bugünkü Görev</span>
+              <strong id="statDueToday">0</strong>
+              <small id="statDueTodayNote">Hazır</small>
+            </article>
+            <article class="stat-card success">
+              <span>Tamamlanma</span>
+              <strong id="statCompletion">0%</strong>
+              <small id="statCompletionNote">Bugün</small>
+            </article>
+            <article class="stat-card danger">
+              <span>Geciken</span>
+              <strong id="statOverdue">0</strong>
+              <small>Bugünden önce kalanlar</small>
+            </article>
+            <article class="stat-card info">
+              <span>Toplam Görev</span>
+              <strong id="statTaskCount">0</strong>
+              <small>Aktif şablon</small>
+            </article>
+          </div>
+
+          <div class="dashboard-layout">
+            <section class="panel alerts-panel">
+              <div class="panel-head">
+                <h2 id="dailyPanelTitle">Bugünün İşleri</h2>
+                <div class="button-row panel-head-actions">
+                  <button type="button" id="openPrintRangeBtn">Yazdır</button>
+                  <span id="todayProgressText"></span>
+                </div>
+              </div>
+              <div class="date-nav">
+                <button id="prevDayBtn" type="button">Önceki Gün</button>
+                <input type="date" id="dashboardDate" />
+                <button id="todayBtn" type="button">Bugün</button>
+                <button id="nextDayBtn" type="button">Sonraki Gün</button>
+              </div>
+              <div class="progress"><span id="todayProgressBar"></span></div>
+              <div class="task-list" id="todayTaskList"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Uyarılar</h2>
+                <span class="badge danger" id="alertCount">0</span>
+              </div>
+              <div class="button-row alert-actions">
+                <button id="toggleOverdueBtn">Gecikenleri Göster</button>
+                <button id="completeAllOverdueBtn" class="danger-btn">Tüm Gecikenleri Tamamla</button>
+              </div>
+              <div id="overdueList" class="alert-list"></div>
+              <div class="panel-head spaced">
+                <h2 id="upcomingTitle">Yaklaşan Günlük Görevler</h2>
+              </div>
+              <div class="tabs" id="upcomingTabs">
+                <button class="tab-btn active" type="button" data-upcoming="daily">Günlük</button>
+                <button class="tab-btn" type="button" data-upcoming="weekly">Haftalık</button>
+                <button class="tab-btn" type="button" data-upcoming="monthly">Aylık</button>
+              </div>
+              <div id="upcomingTaskList" class="compact-list"></div>
+            </section>
+          </div>
+          <div class="dashboard-layout secondary-dashboard">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Gün Sonu Kapanış</h2>
+                <button id="resetClosingBtn">Sıfırla</button>
+              </div>
+              <div id="closingChecklist" class="task-list"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Haftalık Performans</h2>
+                <span id="trendSummary"></span>
+              </div>
+              <div id="weeklyChart" class="bar-chart"></div>
+              <div class="panel-head spaced">
+                <h2>En Çok Gecikenler</h2>
+              </div>
+              <div id="topOverdueList" class="compact-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="notesView">
+          <div class="notes-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Notlar</h2>
+                <span class="badge" id="noteCountBadge">0 not</span>
+              </div>
+              <div class="note-form">
+                <input type="hidden" id="noteId" />
+                <input type="text" id="noteTitle" placeholder="Not başlığı" maxlength="120" />
+                <textarea id="noteBody" rows="6" placeholder="Notunu yaz..."></textarea>
+                <div class="form-grid">
+                  <label>Kategori <input type="text" id="noteCategory" placeholder="Genel" maxlength="60" /></label>
+                  <label>Renk
+                    <select id="noteColor">
+                      <option value="blue">Mavi</option>
+                      <option value="green">Yeşil</option>
+                      <option value="amber">Sarı</option>
+                      <option value="rose">Kırmızı</option>
+                      <option value="plain">Sade</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="check-label"><input type="checkbox" id="notePinned" /> Sabitle</label>
+                <div class="dialog-actions">
+                  <button type="button" id="clearNoteBtn">Temizle</button>
+                  <button type="button" id="deleteNoteBtn" class="danger-btn">Sil</button>
+                  <button type="button" id="saveNoteBtn" class="primary-btn">Notu Kaydet</button>
+                </div>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="toolbar">
+                <input type="search" id="noteSearch" placeholder="Not ara..." />
+                <select id="noteCategoryFilter"></select>
+              </div>
+              <div id="notesList" class="notes-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="personalView">
+          <div id="personalLockedPanel" class="panel personal-lock-panel">
+            <h2>Kişisel Alan Kilitli</h2>
+            <p class="muted">Bu alan giriş yapan mail hesabına özeldir. Şifre koruması açıksa kişisel görev ve notları görmek için şifreni gir.</p>
+            <div class="holiday-form">
+              <input type="password" id="personalUnlockPassword" placeholder="Kişisel alan şifresi" autocomplete="current-password" />
+              <button type="button" id="unlockPersonalBtn" class="primary-btn">Aç</button>
+            </div>
+            <p class="muted" id="personalUnlockMessage"></p>
+          </div>
+          <div id="personalContent">
+            <div class="paperwork-hero personal-hero">
+              <div>
+                <p class="eyebrow" id="personalEmailLabel">Kişisel çalışma alanı</p>
+                <h2 id="personalAreaTitle">Benim Yapılacaklarım</h2>
+                <p class="muted">Ortak görevlerden ayrı, sadece senin hesabına bağlı günlük yapılacak listesi.</p>
+              </div>
+              <div class="paperwork-actions">
+                <label class="inline-date-label">Tarih <input type="date" id="personalTodoDate" /></label>
+              </div>
+            </div>
+            <div class="personal-layout">
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Yeni İş</h2>
+                  <span class="badge" id="personalTodoStats">0 açık</span>
+                </div>
+                <div class="note-form">
+                  <input type="hidden" id="personalTodoId" />
+                  <input type="text" id="personalTodoTitle" placeholder="Yapılacak iş" maxlength="140" />
+                  <textarea id="personalTodoNote" rows="4" placeholder="Kısa not"></textarea>
+                  <div class="form-grid">
+                    <label>Tarih <input type="date" id="personalTodoDue" /></label>
+                    <label>Önem
+                      <select id="personalTodoPriority">
+                        <option value="normal">Normal</option>
+                        <option value="high">Yüksek</option>
+                        <option value="critical">Kritik</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="dialog-actions">
+                    <button type="button" id="clearPersonalTodoBtn">Temizle</button>
+                    <button type="button" id="deletePersonalTodoBtn" class="danger-btn">Sil</button>
+                    <button type="button" id="savePersonalTodoBtn" class="primary-btn">Kaydet</button>
+                  </div>
+                </div>
+              </section>
+              <section class="panel">
+                <div class="toolbar">
+                  <input type="search" id="personalTodoSearch" placeholder="Kişisel iş ara..." />
+                  <select id="personalTodoFilter">
+                    <option value="open">Açık işler</option>
+                    <option value="today">Bugün</option>
+                    <option value="all">Tümü</option>
+                    <option value="done">Tamamlanan</option>
+                  </select>
+                </div>
+                <div id="personalTodoList" class="task-list"></div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="tasksView">
+          <button id="taskFilterToggleBtn" class="mobile-section-toggle" type="button" aria-expanded="false">Filtrele</button>
+          <div class="toolbar">
+            <input type="search" id="taskSearch" placeholder="Görev ara..." />
+            <select id="frequencyFilter">
+              <option value="all">Tüm frekanslar</option>
+              <option value="daily">Hafta içi</option>
+              <option value="weekly">Haftalık</option>
+              <option value="monthly">Aylık</option>
+              <option value="specific">Belirli tarih</option>
+            </select>
+            <select id="categoryFilter"></select>
+            <select id="assigneeFilter"></select>
+            <select id="priorityFilter">
+              <option value="all">Tüm önemler</option>
+              <option value="low">Düşük</option>
+              <option value="normal">Normal</option>
+              <option value="high">Yüksek</option>
+              <option value="critical">Kritik</option>
+            </select>
+             <select id="statusFilter">
+               <option value="all">Tüm durumlar</option>
+               <option value="active">Aktif</option>
+               <option value="passive">Pasif</option>
+               <option value="must">Mutlaka yapılacak</option>
+             </select>
+             <button id="seedDefaultsBtn">Varsayılanları Yenile</button>
+             <button id="openTaskExportDialogBtn">Yazdır</button>
+           </div>
+          <div class="task-table-wrap">
+            <table class="task-table">
+              <thead>
+                <tr>
+                  <th>Sıra</th>
+                  <th>Görev</th>
+                  <th>Kategori</th>
+                  <th>Sorumlu</th>
+                  <th>Frekans</th>
+                  <th>Plan</th>
+                  <th>Durum</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="taskTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="view" id="paperworkView">
+          <div class="paperwork-hero">
+            <div>
+              <p class="eyebrow">Sorumlu hemşire kontrol merkezi</p>
+              <h2>Aylık Evrak ve Bilgisayar İşleri</h2>
+              <p class="muted">Puantaj, nöbet, çizelge, DYS, İKYS, kalite ve gönderim işlerini ay bazlı takip et.</p>
+            </div>
+            <div class="paperwork-actions">
+              <label class="inline-date-label">Takip ayı <input type="month" id="paperworkMonth" /></label>
+              <button id="seedPaperworkTasksBtn">Görevlere Ekle</button>
+              <button id="exportPaperworkSummaryBtn" class="primary-btn">Aylık Özeti PDF</button>
+            </div>
+          </div>
+
+          <button id="paperworkSummaryToggleBtn" class="mobile-section-toggle" type="button" aria-expanded="false">Özet</button>
+          <div class="stats-grid paperwork-stats" id="paperworkStats"></div>
+
+          <div class="tabs paperwork-tabs">
+            <button class="tab-btn active" type="button" data-paperwork-tab="tracking">Evrak Takip Paneli</button>
+            <button class="tab-btn" type="button" data-paperwork-tab="dispatch">Gönderim ve Teslim Kaydı</button>
+            <button class="tab-btn" type="button" data-paperwork-tab="archive">Arşiv</button>
+          </div>
+
+          <div class="paperwork-tab-panel active" id="paperworkTrackingPanel">
+            <div class="paperwork-layout">
+            <section class="panel paperwork-main">
+              <div class="panel-head">
+                <h2>Evrak Takip Paneli</h2>
+                <div class="button-row panel-head-actions">
+                  <button type="button" id="addPaperworkItemBtn">Evrak Ekle</button>
+                  <span class="badge" id="paperworkProgressBadge">0%</span>
+                </div>
+              </div>
+              <div id="paperworkBoard" class="paperwork-board"></div>
+            </section>
+
+            <aside class="paperwork-side">
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Aylık Kapanış</h2>
+                  <span class="badge warning" id="monthlyClosureBadge">Eksik</span>
+                </div>
+                <div id="monthlyClosureList" class="task-list"></div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Hazır Mesajlar</h2>
+                  <span class="badge">Kopyala</span>
+                </div>
+                <div id="messageTemplateList" class="compact-list"></div>
+              </section>
+            </aside>
+            </div>
+          </div>
+
+          <section class="panel paperwork-tab-panel" id="paperworkDispatchPanel">
+            <div class="panel-head">
+              <h2>Gönderim ve Teslim Kaydı</h2>
+              <span class="badge" id="dispatchCountBadge">0 kayıt</span>
+            </div>
+            <div class="dispatch-form">
+              <label class="dispatch-field">Tarih <input type="date" id="dispatchDate" /></label>
+              <label class="dispatch-field">Gönderim tipi
+                <select id="dispatchType">
+                  <option value="DYS">DYS</option>
+                  <option value="E-posta">E-posta</option>
+                  <option value="Elden Teslim">Elden Teslim</option>
+                  <option value="WhatsApp">WhatsApp</option>
+                  <option value="Telefon">Telefon</option>
+                </select>
+              </label>
+              <label class="dispatch-field">Kime / nereye gönderildi? <select id="dispatchTarget"></select></label>
+              <input type="text" id="dispatchTargetOther" class="other-field" placeholder="Kime / nereye elle yaz" />
+              <label class="dispatch-field">Hangi konu / evrak? <select id="dispatchSubject"></select></label>
+              <input type="text" id="dispatchSubjectOther" class="other-field" placeholder="Konu / evrak elle yaz" />
+              <label class="dispatch-field">Durum
+                <select id="dispatchStatus">
+                  <option value="Gönderildi">Gönderildi</option>
+                  <option value="İmzaya Çıktı">İmzaya Çıktı</option>
+                  <option value="Cevap Bekliyor">Cevap Bekliyor</option>
+                  <option value="Arşivlendi">Arşivlendi</option>
+                </select>
+              </label>
+              <textarea id="dispatchNote" rows="2" placeholder="Kısa not"></textarea>
+              <button id="addDispatchBtn" class="primary-btn">Kaydet</button>
+            </div>
+            <div id="dispatchList" class="compact-list"></div>
+          </section>
+          <section class="panel paperwork-tab-panel" id="paperworkArchivePanel">
+            <div class="panel-head">
+              <h2>Aylık Arşiv</h2>
+              <span class="badge" id="archiveCountBadge">0 evrak</span>
+            </div>
+            <div id="paperworkArchiveList" class="compact-list"></div>
+          </section>
+        </section>
+
+        <section class="view" id="calendarView">
+          <div class="calendar-head">
+            <button id="prevMonthBtn">Önceki</button>
+            <h2 id="calendarMonthLabel"></h2>
+            <button id="nextMonthBtn">Sonraki</button>
+          </div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+        </section>
+
+        <section class="view" id="peopleView">
+          <div class="settings-grid">
+            <section class="panel collapsible-panel" data-mobile-panel="people">
+              <button class="mobile-panel-toggle" type="button" data-mobile-panel-toggle="people" aria-expanded="false">Personel</button>
+              <h2>Personel</h2>
+              <div class="mobile-panel-content">
+              <div class="person-form">
+                <input type="hidden" id="personId" />
+                <input type="text" id="personName" placeholder="Ad soyad" />
+                <input type="text" id="personRole" placeholder="Görev/rol" />
+                <input type="text" id="personTc" placeholder="TC kimlik no" inputmode="numeric" maxlength="11" />
+                <input type="tel" id="personPhone" placeholder="Telefon" />
+                <input type="email" id="personEmail" placeholder="E-posta" />
+                <input type="text" id="personCertificate" placeholder="Sertifika / belge" />
+                <input type="date" id="personCertificateDate" title="Sertifika geçerlilik tarihi" />
+                <textarea id="personNote" rows="2" placeholder="Not"></textarea>
+                <button id="addPersonBtn">Ekle</button>
+                <button id="cancelPersonEditBtn" type="button">İptal</button>
+              </div>
+              <div id="peopleList" class="compact-list"></div>
+              </div>
+            </section>
+            <section class="panel collapsible-panel" data-mobile-panel="shift">
+              <button class="mobile-panel-toggle" type="button" data-mobile-panel-toggle="shift" aria-expanded="false">Vardiya ve Nöbet</button>
+              <h2>Vardiya ve Nöbet</h2>
+              <div class="mobile-panel-content">
+              <div class="holiday-form">
+                <input type="date" id="shiftDate" />
+                <select id="shiftPerson"></select>
+                <input type="text" id="shiftNote" placeholder="Nöbet/vardiya notu" />
+                <button id="addShiftBtn">Kaydet</button>
+              </div>
+              <div id="shiftList" class="compact-list"></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="templatesView">
+          <div class="settings-grid">
+            <section class="panel">
+              <h2>Hazır Şablonlar</h2>
+              <p class="muted">Puantaj, nöbet listesi, koordinasyon ve kalite çıktıları için hızlı taslak üretir.</p>
+              <div class="holiday-form">
+                <select id="templateType">
+                  <option value="daily">Günlük özet</option>
+                  <option value="puantaj">Puantaj taslağı</option>
+                  <option value="nobet">Nöbet listesi taslağı</option>
+                  <option value="koordinasyon">Koordinasyon formu</option>
+                  <option value="kalite">Kalite evrak kontrolü</option>
+                  <option value="egitim">Eğitim teslim formu</option>
+                </select>
+                <input type="date" id="templatePrintStart" />
+                <input type="date" id="templatePrintEnd" />
+                <button id="buildTemplateBtn">Taslak Oluştur</button>
+                <button id="printTemplateBtn">Yazdır</button>
+              </div>
+              <textarea id="templateOutput" rows="16"></textarea>
+            </section>
+            <section class="panel">
+              <h2>Kategori Yönetimi</h2>
+              <div class="holiday-form">
+                <input type="text" id="categoryName" placeholder="Yeni kategori" />
+                <button id="addCategoryBtn">Ekle</button>
+              </div>
+              <div id="categoryList" class="compact-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="reportsView">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Rapor Dışa Aktar</h2>
+              <span id="reportRangeLabel"></span>
+            </div>
+            <div class="report-controls">
+              <label>Başlangıç <input type="date" id="reportStart" /></label>
+              <label>Bitiş <input type="date" id="reportEnd" /></label>
+              <button id="exportPdfBtn" class="primary-btn">PDF İndir</button>
+              <button id="exportXlsxBtn">Excel (.xlsx) İndir</button>
+              <button id="exportYearBtn">Yıl Arşivi</button>
+            </div>
+            <div class="report-summary" id="reportSummary"></div>
+            <div class="panel-head spaced">
+              <h2>Detaylı Raporlar</h2>
+            </div>
+            <div id="advancedReports" class="report-grid"></div>
+          </div>
+        </section>
+
+        <section class="view" id="settingsView">
+          <div class="settings-grid">
+            <section class="panel" id="commonPasswordPanel">
+              <h2>Ortak Alan Şifresi</h2>
+              <p class="muted" id="commonPasswordHelp">Ortak alan sekmelerine girişte ek şifre ister. Bu ayarı yalnızca admin değiştirebilir.</p>
+              <div class="holiday-form">
+                <input type="password" id="currentPassword" placeholder="Mevcut şifre" autocomplete="current-password" />
+                <input type="password" id="newPassword" placeholder="Yeni şifre" autocomplete="new-password" />
+                <button id="savePasswordBtn">Şifreyi Kaydet</button>
+                <button id="disablePasswordBtn">Şifreyi Kapat</button>
+              </div>
+              <div class="holiday-form" id="commonAutoLockRow" style="display:none;margin-top:8px">
+                <label style="display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:13px;color:var(--muted)">Otomatik kilitle:
+                  <input type="number" id="commonAutoLockMinutes" min="1" max="480" placeholder="0 = kapalı" style="width:90px" />
+                  <span style="font-size:13px;color:var(--muted)">dakika sonra</span>
+                </label>
+                <button id="saveCommonAutoLockBtn" type="button">Kaydet</button>
+              </div>
+              <p class="muted" id="passwordStatus"></p>
+            </section>
+            <section class="panel">
+              <h2>Yedekleme</h2>
+              <p class="muted">Tüm görev, tamamlama ve tatil verilerini JSON olarak dışa aktarabilir ya da geri yükleyebilirsin.</p>
+              <div class="form-grid">
+                <label>Yedek şifresi <input type="password" id="backupPassword" placeholder="İsteğe bağlı" /></label>
+                <label>Yedek hatırlatma (gün) <input type="number" id="backupReminderDays" min="1" max="90" /></label>
+              </div>
+              <div class="button-row">
+                <button id="backupBtn" class="primary-btn">JSON Yedek İndir</button>
+                <button id="encryptedBackupBtn">Şifreli Yedek İndir</button>
+                <button id="restoreIndexedDbBtn">IndexedDB'den Geri Al</button>
+                <label class="file-btn">JSON Geri Yükle<input type="file" id="restoreInput" accept="application/json" /></label>
+              </div>
+              <p class="muted" id="backupReminderStatus"></p>
+            </section>
+            <section class="panel" id="firebaseSyncPanel">
+              <h2>Firebase Senkronizasyon</h2>
+              <p class="muted">Firebase config girilirse tüm görev, evrak ve gönderim kayıtları cihazlar arasında canlı senkronize edilir.</p>
+              <p class="muted" id="firebaseStatus">Firebase durumu hazırlanıyor...</p>
+              <p class="muted" id="workspaceRoleStatus">Ortak alan rolü hazırlanıyor...</p>
+            </section>
+            <section class="panel" id="memberRolesPanel">
+              <h2>Ortak Alan Yetkileri</h2>
+              <p class="muted" id="memberRoleHelp">Yalnızca yönetici rolündeki kullanıcılar ortak alan rollerini değiştirebilir.</p>
+              <div class="holiday-form">
+                <select id="memberUserSelect"></select>
+                <select id="memberRole">
+                  <option value="viewer">Sadece görüntüleme</option>
+                  <option value="editor">Düzenleyici</option>
+                  <option value="admin">Yönetici</option>
+                </select>
+                <button id="saveMemberRoleBtn" type="button">Rolü Kaydet</button>
+              </div>
+              <div id="memberRoleList" class="compact-list"></div>
+            </section>
+            <section class="panel" id="personalSettingsPanel">
+              <h2>Kişisel Alan Ayarları</h2>
+              <p class="muted" id="personalSettingsOwner">Kişisel ayarlar giriş yapan mail hesabına göre saklanır.</p>
+              <div class="holiday-form">
+                <input type="text" id="personalAreaNameInput" placeholder="Sekme adı" maxlength="80" />
+                <button id="savePersonalAreaNameBtn" type="button">Adı Kaydet</button>
+              </div>
+              <div class="holiday-form">
+                <select id="startupViewSelect">
+                  <option value="common:dashboard">Ortak Alan - Ana Sayfa</option>
+                  <option value="common:notes">Ortak Alan - Notlar</option>
+                  <option value="common:tasks">Ortak Alan - Görevler</option>
+                  <option value="common:paperwork">Ortak Alan - Evrak</option>
+                  <option value="common:calendar">Ortak Alan - Takvim</option>
+                  <option value="common:people">Ortak Alan - Personel</option>
+                  <option value="common:templates">Ortak Alan - Şablonlar</option>
+                  <option value="common:reports">Ortak Alan - Raporlar</option>
+                  <option value="common:appearance">Ortak Alan - Kişisel Tercihler</option>
+                  <option value="common:help">Ortak Alan - Yardım</option>
+                  <option value="personal:dashboard">Kişisel Alan - Ana Sayfa</option>
+                  <option value="personal:notes">Kişisel Alan - Notlar</option>
+                  <option value="personal:tasks">Kişisel Alan - Görevler</option>
+                  <option value="personal:paperwork">Kişisel Alan - Evrak</option>
+                  <option value="personal:calendar">Kişisel Alan - Takvim</option>
+                  <option value="personal:people">Kişisel Alan - Personel</option>
+                  <option value="personal:templates">Kişisel Alan - Şablonlar</option>
+                  <option value="personal:reports">Kişisel Alan - Raporlar</option>
+                  <option value="personal:help">Kişisel Alan - Yardım</option>
+                </select>
+                <button id="saveStartupViewBtn" type="button">Açılışı Kaydet</button>
+              </div>
+              <div class="theme-section">
+                <h3>Tema ve Renk</h3>
+                <div class="theme-row">
+                  <label class="muted">Mod</label>
+                  <div class="theme-mode-toggle">
+                    <button type="button" id="personalThemeLightBtn" class="theme-mode-btn active">☀️ Açık</button>
+                    <button type="button" id="personalThemeDarkBtn" class="theme-mode-btn">🌙 Koyu</button>
+                  </div>
+                </div>
+                <div class="theme-row">
+                  <label class="muted">Renk</label>
+                  <div class="color-picker-grid" id="colorPickerGrid"></div>
+                </div>
+              </div>
+              <div class="theme-section">
+                <details>
+                  <summary style="cursor:pointer; font-weight:700; font-size:14px; margin-bottom:8px;">Kişisel Alan Yazı Boyutu & Renk</summary>
+                  <p class="muted" style="margin:0 0 8px;font-size:12px">Kişisel alandaki görev listesi, not kartları, panel başlıkları ve etiketlerin yazı boyutu ile rengini özelleştir.</p>
+                  <div id="personalTypographyEditor"></div>
+                </details>
+              </div>
+              <div class="holiday-form">
+                <input type="password" id="personalCurrentPassword" placeholder="Mevcut kişisel şifre" autocomplete="current-password" />
+                <input type="password" id="personalNewPassword" placeholder="Yeni kişisel şifre" autocomplete="new-password" />
+                <button id="savePersonalPasswordBtn" type="button">Kişisel Şifreyi Kaydet</button>
+                <button id="disablePersonalPasswordBtn" type="button">Kişisel Şifreyi Kapat</button>
+              </div>
+              <div class="holiday-form" id="personalAutoLockRow" style="display:none;margin-top:8px">
+                <label style="display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:13px;color:var(--muted)">Otomatik kilitle:
+                  <input type="number" id="personalAutoLockMinutes" min="1" max="480" placeholder="0 = kapalı" style="width:90px" />
+                  <span style="font-size:13px;color:var(--muted)">dakika sonra</span>
+                </label>
+                <button id="savePersonalAutoLockBtn" type="button">Kaydet</button>
+              </div>
+              <p class="muted" id="personalPasswordStatus"></p>
+            </section>
+            <section class="panel">
+              <h2>Resmi Tatiller</h2>
+              <p class="muted">Ayın 20, 21, 29 ve 30 gibi günlerine denk gelen görevler hafta sonu veya buradaki tarihlere gelirse önceki iş gününe çekilir.</p>
+              <div class="holiday-form">
+                <input type="date" id="holidayDate" />
+                <input type="text" id="holidayName" placeholder="Tatil adı" />
+                <button id="addHolidayBtn">Ekle</button>
+              </div>
+              <div id="holidayList" class="compact-list"></div>
+            </section>
+            <section class="panel" id="commonAuditPanel">
+              <h2>Log Kaydı ve PWA</h2>
+              <p class="muted">Uygulama çevrimdışı çalışır. Tarayıcı desteklerse ana ekrana uygulama gibi eklenebilir.</p>
+              <div class="button-row">
+                <button id="installPwaBtn">Uygulama Olarak Kur</button>
+                <button id="openAuditLogBtn" type="button" class="primary-btn">Log Kaydı</button>
+                <button id="clearAuditBtn">Denetim Kaydını Temizle</button>
+              </div>
+              <div id="auditList" class="compact-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="appearanceView">
+          <div class="settings-grid">
+            <section class="panel" id="commonThemePanel">
+              <h2>Ortak Alan Tema ve Renk</h2>
+              <p class="muted">Bu görünüm sadece senin hesabına uygulanır; ortak alandaki diğer kullanıcıların ekranını değiştirmez.</p>
+              <div class="holiday-form">
+                <input type="text" id="userNicknameInput" placeholder="Takma ad" maxlength="80" />
+                <button type="button" id="saveUserNicknameBtn">Takma Adı Kaydet</button>
+              </div>
+              <p class="muted" id="userNicknameStatus">Boş bırakılırsa menüde e-posta adresin gösterilir.</p>
+              <div class="theme-section">
+                <div class="theme-row">
+                  <label class="muted">Mod</label>
+                  <div class="theme-mode-toggle">
+                    <button type="button" id="commonThemeLightBtn" class="theme-mode-btn active">☀️ Açık</button>
+                    <button type="button" id="commonThemeDarkBtn" class="theme-mode-btn">🌙 Koyu</button>
+                  </div>
+                </div>
+                <div class="theme-row">
+                  <label class="muted">Renk</label>
+                  <div class="color-picker-grid" id="commonColorPickerGrid"></div>
+                </div>
+              </div>
+            </section>
+            <section class="panel" id="commonTypographyPanel">
+              <details>
+                <summary style="cursor:pointer; font-weight:700; font-size:16px; margin-bottom:10px;">Ortak Alan Yazı Boyutu & Renk</summary>
+                <p class="muted">Ortak alandaki görev listesi, not kartları, panel başlıkları ve etiketlerin yazı boyutu ile rengini özelleştir. Sadece senin hesabına uygulanır.</p>
+                <div id="commonTypographyEditor"></div>
+              </details>
+            </section>
+            <section class="panel" id="notificationPreferencesPanel">
+              <h2>Bildirim ve Mobil Görünüm</h2>
+              <p class="muted">Bu ayarlar sadece senin hesabına uygulanır; ortak alan verisini veya diğer kullanıcıların bildirimlerini değiştirmez.</p>
+              <div class="button-row">
+                <button id="notificationToggleBtn">Bildirimleri Aç</button>
+                <button id="compactToggleBtn">Kompakt Mobil Mod</button>
+              </div>
+              <div class="form-grid">
+                <label class="check-label"><input type="checkbox" id="commonNotificationsEnabled" /> Ortak alan görev bildirimleri</label>
+                <label class="check-label"><input type="checkbox" id="personalNotificationsEnabled" /> Kişisel yapılacak bildirimleri</label>
+                <label class="check-label" id="androidNotificationsRow" hidden><input type="checkbox" id="androidNotificationsEnabled" /> Android uygulama bildirimleri</label>
+              </div>
+              <div class="form-grid">
+                <label>Kritik bildirim aralığı (dk) <input type="number" id="criticalNotifyMinutes" min="1" max="240" placeholder="1-240 dk" /><small class="field-hint">Min 1, maks 240 dk</small></label>
+                <label>Normal bildirim aralığı (dk) <input type="number" id="normalNotifyMinutes" min="1" max="480" placeholder="1-480 dk" /><small class="field-hint">Min 1, maks 480 dk</small></label>
+                <label>Sessiz başlangıç <input type="time" id="quietStart" /></label>
+                <label>Sessiz bitiş <input type="time" id="quietEnd" /></label>
+              </div>
+              <div class="button-row">
+                <button id="saveNotificationSettingsBtn">Bildirim Ayarlarını Kaydet</button>
+                <button id="androidTestNotificationBtn" type="button" hidden>Android Test Bildirimi</button>
+                <button id="androidRunNotificationBtn" type="button" hidden>Android Kontrolünü Çalıştır</button>
+              </div>
+              <p class="muted" id="notificationStatus"></p>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="helpView">
+          <div class="help-layout">
+            <section class="panel help-hero">
+              <p class="eyebrow">Kullanım kılavuzu</p>
+              <h2>Evde Sağlık İş Takip Sistemi Yardım Merkezi</h2>
+              <p class="muted">Bu kılavuz; ortak alan, kişisel alan, görevler, evrak, takvim, raporlar, bildirimler, yedekleme, roller ve sadeleşmiş görünüm dahil uygulamadaki tüm temel iş akışlarını açıklar.</p>
+            </section>
+
+            <section class="panel help-section">
+              <h2>1. Genel Mantık</h2>
+              <ul>
+                <li><strong>Ortak Alan:</strong> Birimin birlikte kullandığı görev, evrak, personel, rapor, takvim, not ve yönetim verileridir.</li>
+                <li><strong>Kişisel Alan:</strong> Giriş yapan kullanıcıya özel görev/not/yapılacak alanıdır. Ortak alandaki hazır veya eklenen veriler kişisel alana taşınmaz.</li>
+                <li><strong>Kullanıcıya özel tercihler:</strong> Tema, renk, bildirim, kompakt mod ve sadeleşmiş görünüm kullanıcının kendi hesabına göre saklanır.</li>
+                <li><strong>Canlı senkronizasyon:</strong> Firebase etkinse ortak alan verileri yetkili kullanıcılar arasında; kişisel tercihler ve kişisel alan verileri ise aynı kullanıcı hesabının cihazları arasında senkronize olur.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>2. Giriş, Roller ve Yetkiler</h2>
+              <ul>
+                <li>Firebase açıkken kullanıcı e-posta ve şifre ile giriş yapar.</li>
+                <li><strong>Yönetici:</strong> Ortak alan ayarlarına, rol yönetimine, log kayıtlarına ve ortak alan şifre yönetimine erişir.</li>
+                <li><strong>Düzenleyici:</strong> Ortak alan verilerini düzenleyebilir; admin-only ayarlara giremez.</li>
+                <li><strong>Sadece görüntüleme:</strong> Ortak alanı görebilir ancak düzenleme yapamaz.</li>
+                <li>Sağ/sol menüde görünen kullanıcı e-postası aktif oturumu gösterir.</li>
+                <li>Çıkış yap butonu aktif Firebase oturumunu kapatır.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>3. Ana Sayfa</h2>
+              <ul>
+                <li>Bugünkü veya seçilen tarihteki görevler, tamamlanma yüzdesi, gecikenler ve toplam aktif görev sayısı özetlenir.</li>
+                <li><strong>Bugünün İşleri:</strong> Seçili tarihte yapılacak görevleri listeler. Checkbox ile tamamlanır veya geri alınır.</li>
+                <li>Önceki Gün, Bugün, Sonraki Gün ve tarih seçici ile farklı günlere geçilir.</li>
+                <li>Görev tamamlandığında tamamlayan kullanıcının e-posta adresi görev altında küçük şekilde görünür.</li>
+                <li><strong>Uyarılar:</strong> Geciken görevleri gösterir, toplu tamamlama yapılabilir.</li>
+                <li><strong>Yaklaşan görevler:</strong> Günlük, haftalık ve aylık görevleri yaklaşan plana göre gösterir.</li>
+                <li><strong>Gün sonu kapanış:</strong> Günlük kontrol listesiyle iş bitirme kontrolü yapılır.</li>
+                <li><strong>Haftalık performans:</strong> Son günlerin tamamlanma oranını gösterir.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>4. Sadeleşmiş Görünüm</h2>
+              <ul>
+                <li>Üstteki <strong>Sadeleşmiş Görünüm</strong> butonu ana sayfayı odak moduna alır.</li>
+                <li>Bu modda sol menü kalır; ana ekranda sadece Bugünün İşleri kartı geniş görünür.</li>
+                <li>Tarih navigasyonu, yazdırma, hızlı görev ekleme ve görev ekleme butonları çalışmaya devam eder.</li>
+                <li>Sol menüden başka sekmeye geçilebilir; ana sayfaya dönünce sade görünüm tekrar uygulanır.</li>
+                <li>Ortak alan ve kişisel alan sade görünüm tercihleri ayrı ve kullanıcıya özeldir.</li>
+                <li>Aynı kullanıcı başka cihazda oturum açmışsa tercih canlı senkronize olur.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>5. Görevler</h2>
+              <ul>
+                <li>Görevler ekranında tüm görev şablonları aranır, filtrelenir ve düzenlenir.</li>
+                <li>Filtreler frekans, kategori, sorumlu, önem ve duruma göre çalışır.</li>
+                <li>Görev eklerken başlık, not, tarih/frekans, önem, kategori, sorumlu, özel tekrar, aktiflik, mutlaka yapılacak ve ek dosya bilgileri girilir.</li>
+                <li>Frekans seçenekleri hafta içi, haftalık, aylık ve belirli tarihtir.</li>
+                <li>Aylık görevlerde ayın günü ve tatil/hafta sonu ise önceki iş günü kuralı kullanılabilir.</li>
+                <li>Görevler düzenlenebilir, silinebilir ve liste ekranından PDF/Excel çıktısı alınabilir.</li>
+                <li>Varsayılanları yenile butonu eksik varsayılan görevleri geri ekler.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>6. Takvim ve Gün Detayı</h2>
+              <ul>
+                <li>Takvim seçilen ayın görevlerini gün hücrelerinde gösterir.</li>
+                <li>Geciken günler ve tamamlanan görevler renklerle ayırt edilir.</li>
+                <li>Bir güne tıklanınca gün görevleri modalı açılır.</li>
+                <li>Gün modalında görev tamamlanabilir, geri alınabilir, not yazılabilir ve gecikme nedeni seçilebilir.</li>
+                <li>Seçili görevler başka güne aktarılabilir.</li>
+                <li>Sürükle-bırak ile görev sırası veya gün aktarımı yapılabilir.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>7. Notlar</h2>
+              <ul>
+                <li>Notlar başlık, içerik, kategori, renk ve sabitleme bilgisiyle kaydedilir.</li>
+                <li>Arama ve kategori filtresiyle notlar bulunur.</li>
+                <li>Kişisel alandayken notlar kişisel alana; ortak alandayken ortak alana kaydedilir.</li>
+                <li>Kişisel alan kilitliyse kişisel notlar görüntülenmez ve düzenlenmez.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>8. Evrak Modülü</h2>
+              <ul>
+                <li>Aylık evrak ve bilgisayar işleri takip ayına göre yönetilir.</li>
+                <li>Puantaj, nöbet listesi, çalışma çizelgesi, İKYS, bakanlık raporu, e-rapor, kalite ve eğitim gibi işler hazır gelir.</li>
+                <li>Her evrak için durum, alt görevler, notlar ve arşiv bilgisi takip edilir.</li>
+                <li>Alt görevler tamamlandıkça evrak durumu hazırlanıyor veya gönderildi seviyesine ilerler.</li>
+                <li>Arşiv sekmesi kapanan evrakları gösterir.</li>
+                <li>Gönderim ve teslim kaydı DYS, e-posta, elden teslim gibi işlemleri konu, hedef, durum ve notla kaydeder.</li>
+                <li>Aylık kapanış listesi evrak ayının son kontrolünü sağlar.</li>
+                <li>Hazır mesajlar panoya kopyalanarak yazışmalarda kullanılabilir.</li>
+                <li>Aylık evrak özeti PDF olarak indirilebilir.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>9. Personel ve Vardiya</h2>
+              <ul>
+                <li>Personel kartlarında ad, rol, TC, telefon, e-posta, sertifika, geçerlilik ve not tutulur.</li>
+                <li>Personel e-postası mail bağlantısı olarak görünür.</li>
+                <li>Vardiya/nöbet kayıtları tarih, personel ve not ile eklenir.</li>
+                <li>Görevlerde sorumlu seçimi personel kayıtlarından beslenir.</li>
+                <li>Personel silindiğinde o personele bağlı görev sorumluları boşaltılır.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>10. Şablonlar ve Kategoriler</h2>
+              <ul>
+                <li>Şablonlar günlük özet, puantaj taslağı, nöbet listesi, koordinasyon formu, kalite kontrolü ve eğitim teslim formu üretir.</li>
+                <li>Şablonlar seçilen tarih aralığındaki görev, personel ve vardiya verilerini kullanır.</li>
+                <li>Üretilen taslak yazdırılabilir.</li>
+                <li>Kategori yönetimiyle yeni görev kategorileri eklenir veya özel kategoriler silinir.</li>
+                <li>Varsayılan kategoriler korunur.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>11. Raporlar ve Dışa Aktarım</h2>
+              <ul>
+                <li>Rapor ekranında seçilen tarih aralığına göre görev durumu özetlenir.</li>
+                <li>PDF ve Excel çıktıları alınabilir.</li>
+                <li>Yıl arşivi seçilen yılın tüm görev durumlarını dışa aktarır.</li>
+                <li>Detaylı raporlar kategori, sorumlu, durum ve gecikme gibi kırılımlarla analiz sağlar.</li>
+                <li>Görev listesi ekranındaki filtrelere göre PDF/Excel çıktısı alınabilir.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>12. Kişisel Alan</h2>
+              <ul>
+                <li>Kişisel alan giriş yapan kullanıcıya özel saklanır.</li>
+                <li>Ortak alan görevleri, evrakları veya eklenen ortak veriler kişisel alanda otomatik görünmez.</li>
+                <li>Kişisel yapılacak listesinde başlık, not, tarih ve önem girilir.</li>
+                <li>Kişisel yapılacaklar açık, bugün ve tümü filtreleriyle izlenir.</li>
+                <li>Kişisel alan şifreyle korunabilir; şifre açıksa kilit açılmadan içerik görünmez.</li>
+                <li>Kişisel alan adı, açılış sekmesi, kişisel tema ve renk kullanıcıya özel ayarlanır.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>13. Kişisel Tercihler</h2>
+              <ul>
+                <li>Ortak alanda görünen Kişisel Tercihler sekmesi her kullanıcıya özel çalışır.</li>
+                <li>Ortak alan tema rengi ve açık/koyu modu diğer kullanıcıları etkilemez.</li>
+                <li>Bildirimleri Aç/Kapat düğmesi tarayıcı bildirimlerini bu kullanıcı için yönetir.</li>
+                <li>Ortak alan görev bildirimleri ve kişisel yapılacak bildirimleri ayrı ayrı açılıp kapatılır.</li>
+                <li>Kritik bildirim aralığı kritik veya mutlaka yapılacak görevler içindir.</li>
+                <li>Normal bildirim aralığı normal ortak görevler ve kişisel yapılacaklar içindir.</li>
+                <li>Sessiz saatler arasında bildirim gönderilmez.</li>
+                <li>Bildirimler kullanıcı kapatana kadar açık kalacak şekilde istenir; yeni bildirim gelirse önceki bildirim yenisiyle değiştirilir.</li>
+                <li>Kompakt mobil mod kullanıcıya özel görsel tercihtir.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>14. Yönetici Ayarları</h2>
+              <ul>
+                <li>Ortak alan ayarları Firebase açıkken yalnızca admin rolündeki kullanıcılar tarafından açılır.</li>
+                <li>Ortak alan şifresi ek koruma sağlar; admin tarafından açılır, değiştirilir veya kapatılır.</li>
+                <li>Firebase paneli bağlantı durumunu ve ortak alan rolünü gösterir.</li>
+                <li>Rol yönetimiyle kullanıcılar yönetici, düzenleyici veya sadece görüntüleme rolüne alınır.</li>
+                <li>Yedekleme panelinden JSON veya şifreli yedek alınabilir, JSON geri yüklenebilir, IndexedDB yedeği geri alınabilir.</li>
+                <li>Resmi tatiller aylık görevlerin önceki iş gününe çekilmesinde kullanılır.</li>
+                <li>Log kaydı modalı seçilen tarih aralığındaki ortak alan işlemlerini gösterir.</li>
+                <li>Admin seçilen tarih aralığındaki log kayıtlarını silebilir; bu silme işlemi ayrıca loga işlenir.</li>
+              </ul>
+            </section>
+
+            <section class="panel help-section">
+              <h2>15. Senkronizasyon ve Güvenli Kullanım</h2>
+              <ul>
+                <li>Ortak alan verileri ortak çalışma alanı dokümanında saklanır.</li>
+                <li>Kişisel alan, kişisel tercihler ve kullanıcıya özel görünüm ayarları kullanıcının private dokümanında saklanır.</li>
+                <li>Bir cihazda yapılan kişisel tercih değişikliği aynı kullanıcı hesabının diğer cihazlarına canlı yansır.</li>
+                <li>Ortak alan işlem logları ekleme, düzenleme, tamamlama, silme ve durum değiştirme gibi işlemleri kaydeder.</li>
+                <li>Tarayıcı cache veya service worker eski dosya tutarsa hard refresh veya cache temizleme gerekebilir.</li>
+                <li>Düzenli yedek almak veri güvenliği için önerilir.</li>
+              </ul>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="taskDialog">
+      <form method="dialog" id="taskForm" class="dialog-card">
+        <div class="dialog-head">
+          <h2 id="taskDialogTitle">Görev Ekle</h2>
+          <button type="button" id="closeDialogBtn" class="icon-btn">×</button>
+        </div>
+        <input type="hidden" id="taskId" />
+        <label>Görev Adı <input type="text" id="taskTitle" required maxlength="160" /></label>
+        <label>Not <textarea id="taskDescription" rows="3"></textarea></label>
+        <div class="form-grid">
+          <label>Görev tarihi <input type="date" id="taskDate" /></label>
+          <label>Frekans
+            <select id="taskFrequency">
+              <option value="daily">Hafta içi</option>
+              <option value="weekly">Haftalık</option>
+              <option value="monthly">Aylık</option>
+              <option value="specific">Belirli tarih</option>
+            </select>
+          </label>
+          <label>Önem
+            <select id="taskPriority">
+              <option value="low">Düşük</option>
+              <option value="normal">Normal</option>
+              <option value="high">Yüksek</option>
+              <option value="critical">Kritik</option>
+            </select>
+          </label>
+          <label>Kategori <select id="taskCategory"></select></label>
+          <label>Sorumlu <select id="taskAssignee"></select></label>
+          <label>Özel tekrar
+            <select id="taskRepeatRule"></select>
+          </label>
+        </div>
+        <div id="weeklyOptions" class="weekday-picker"></div>
+        <div id="monthlyOptions" class="form-grid">
+          <label>Ayın günü <input type="number" id="monthDay" min="1" max="31" /></label>
+          <label class="check-label"><input type="checkbox" id="adjustBusinessDay" /> Tatil/hafta sonu ise önceki iş günü</label>
+        </div>
+        <div id="specificOptions">
+          <label>Belirli tarih <input type="date" id="specificDate" /></label>
+        </div>
+        <label class="check-label"><input type="checkbox" id="taskActive" checked /> Aktif</label>
+        <label class="check-label"><input type="checkbox" id="taskMustDo" /> Bugün mutlaka yapılacak olarak öne çıkar</label>
+        <label>Ek / fotoğraf <input type="file" id="taskAttachment" accept="image/*,.pdf,.txt,.doc,.docx,.xls,.xlsx" /></label>
+        <div id="taskAttachmentPreview" class="compact-list"></div>
+        <div class="dialog-actions">
+          <button type="button" id="deleteTaskBtn" class="danger-btn mobile-icon-action" data-mobile-icon="🗑️" aria-label="Sil">🗑️</button>
+          <button type="submit" class="primary-btn">Kaydet</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="quickTaskDialog">
+      <form method="dialog" id="quickTaskForm" class="dialog-card">
+        <div class="dialog-head">
+          <h2 id="quickTaskDialogTitle">Hızlı Görev Ekle</h2>
+          <button type="button" id="closeQuickTaskDialogBtn" class="icon-btn">×</button>
+        </div>
+        <input type="hidden" id="quickTaskId" />
+        <label>Başlık <input type="text" id="quickTaskTitle" required maxlength="160" /></label>
+        <label>İçerik / not <textarea id="quickTaskNote" rows="4"></textarea></label>
+        <div class="segmented">
+          <button type="button" class="segment-btn active" id="quickTodayBtn" data-quick-date="today">Bugün</button>
+          <button type="button" class="segment-btn" id="quickTomorrowBtn" data-quick-date="tomorrow">Yarın</button>
+        </div>
+        <label class="check-label"><input type="checkbox" id="quickTaskMustDo" /> Kesin yapılacak işlem</label>
+        <div class="dialog-actions">
+          <button type="button" id="deleteQuickTaskBtn" class="danger-btn mobile-icon-action" data-mobile-icon="🗑️" aria-label="Sil">🗑️</button>
+          <span class="button-row">
+            <button type="button" id="cancelQuickTaskBtn">İptal</button>
+            <button type="submit" class="primary-btn">Kaydet</button>
+          </span>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dayDialog">
+      <form method="dialog" class="dialog-card">
+        <div class="dialog-head">
+          <h2 id="dayDialogTitle">Günün Görevleri</h2>
+          <button type="button" id="closeDayDialogBtn" class="icon-btn">×</button>
+        </div>
+        <input type="hidden" id="dayDialogDate" />
+        <div class="button-row">
+          <button type="button" id="selectAllDayTasksBtn">Tümünü Seç</button>
+          <button type="button" id="completeSelectedDayTasksBtn" class="primary-btn">Seçilileri Tamamla</button>
+        </div>
+        <div class="task-list" id="dayTaskList"></div>
+        <div class="transfer-box">
+          <h2>Görev Aktar</h2>
+          <div class="form-grid">
+            <label>Hedef gün <input type="date" id="transferTargetDate" /></label>
+            <label>Aktarım tipi
+              <select id="transferMode">
+                <option value="selected">Seçili görevler</option>
+                <option value="all">Tüm görevler</option>
+              </select>
+            </label>
+          </div>
+          <button type="button" id="transferTasksBtn">Hedef Güne Aktar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="printRangeDialog">
+      <form method="dialog" class="dialog-card">
+        <div class="dialog-head">
+          <h2>Görevleri Yazdır</h2>
+          <button type="button" id="closePrintRangeDialogBtn" class="icon-btn">×</button>
+        </div>
+        <div class="form-grid">
+          <label>Yazdırma başlangıç <input type="date" id="taskPrintStart" /></label>
+          <label>Yazdırma bitiş <input type="date" id="taskPrintEnd" /></label>
+        </div>
+        <div class="dialog-actions">
+          <span></span>
+          <span class="button-row">
+            <button type="button" id="printTodayBtn" class="primary-btn">Yazdır</button>
+          </span>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="paperworkItemDialog">
+      <form method="dialog" class="dialog-card" id="paperworkItemForm">
+        <div class="dialog-head">
+          <h2 id="paperworkItemDialogTitle">Evrak Ekle</h2>
+          <button type="button" id="closePaperworkItemDialogBtn" class="icon-btn">×</button>
+        </div>
+        <input type="hidden" id="paperworkItemId" />
+        <div class="form-grid">
+          <label>Evrak / ana görev adı <input type="text" id="paperworkItemTitle" required maxlength="120" /></label>
+          <label>Kategori <input type="text" id="paperworkItemCategory" maxlength="80" /></label>
+          <label>Son tarih günü <input type="number" id="paperworkItemDueDay" min="1" max="31" /></label>
+        </div>
+        <label>Açıklama <textarea id="paperworkItemDescription" rows="3"></textarea></label>
+        <div class="transfer-box">
+          <div class="panel-head">
+            <h2>Alt Görevler</h2>
+            <button type="button" id="addPaperworkStepBtn">Alt Görev Ekle</button>
+          </div>
+          <div id="paperworkStepEditor" class="paperwork-step-editor"></div>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" id="deletePaperworkItemBtn" class="danger-btn mobile-icon-action" data-mobile-icon="🗑️" aria-label="Sil">🗑️</button>
+          <span class="button-row">
+            <button type="button" id="cancelPaperworkItemBtn">İptal</button>
+            <button type="submit" class="primary-btn">Kaydet</button>
+          </span>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="taskExportDialog">
+      <form method="dialog" class="dialog-card">
+        <div class="dialog-head">
+          <h2>Görevleri Yazdır</h2>
+          <button type="button" id="closeTaskExportDialogBtn" class="icon-btn">×</button>
+        </div>
+        <p class="muted">Görevler ekranındaki mevcut filtrelere göre indirme formatını seç.</p>
+        <div class="dialog-actions">
+          <span></span>
+          <span class="button-row">
+            <button type="button" id="exportTaskListPdfBtn" class="primary-btn">PDF İndir</button>
+            <button type="button" id="exportTaskListXlsxBtn">Excel İndir</button>
+          </span>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="auditLogDialog">
+      <form method="dialog" class="dialog-card audit-dialog-card">
+        <div class="dialog-head">
+          <h2>Log Kaydı</h2>
+          <button type="button" id="closeAuditLogDialogBtn" class="icon-btn">×</button>
+        </div>
+        <div class="form-grid">
+          <label>Başlangıç <input type="date" id="auditLogStart" /></label>
+          <label>Bitiş <input type="date" id="auditLogEnd" /></label>
+        </div>
+        <div class="dialog-actions">
+          <span class="muted" id="auditLogSummary"></span>
+          <span class="button-row">
+            <button type="button" id="deleteAuditLogRangeBtn" class="danger-btn">Seçili Aralığı Sil</button>
+            <button type="button" id="applyAuditLogRangeBtn" class="primary-btn">Kayıtları Göster</button>
+          </span>
+        </div>
+        <div id="auditLogResults" class="compact-list audit-log-results"></div>
+      </form>
+    </dialog>
+
+    <dialog id="passwordDialog">
+      <form method="dialog" class="dialog-card">
+        <div class="dialog-head">
+          <h2 id="passwordDialogTitle">Şifre Girişi</h2>
+        </div>
+        <label>Şifre <input type="password" id="loginPassword" autocomplete="current-password" /></label>
+        <p class="muted" id="loginMessage"></p>
+        <div class="dialog-actions">
+          <span></span>
+          <button type="button" id="unlockBtn" class="primary-btn">Giriş Yap</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
+
+

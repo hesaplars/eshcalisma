@@ -1,0 +1,9 @@
+{
+  "name": "ESHRutin",
+  "short_name": "ESHRutin",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#102333",
+  "theme_color": "#102333",
+  "description": "Evde saglik is akisi ve gorev takip sistemi."
+}

@@ -1,0 +1,40 @@
+plugins {
+    id "com.android.application"
+}
+
+def requestedCompileSdk = (project.findProperty("compileSdkVersion") ?: "35") as Integer
+def webRoot = rootProject.projectDir.parentFile
+def webAssetsDir = layout.buildDirectory.dir("generated/assets/site")
+
+android {
+    namespace "com.esh.takip"
+    compileSdk requestedCompileSdk
+
+    defaultConfig {
+        applicationId "com.esh.takip"
+        minSdk 23
+        targetSdk requestedCompileSdk
+        versionCode 1
+        versionName "1.0"
+    }
+
+    sourceSets {
+        main {
+            assets.srcDir(webAssetsDir)
+        }
+    }
+}
+
+tasks.register("syncWebAssets", Copy) {
+    from(webRoot) {
+        include "index.html"
+        include "app.js"
+        include "style.css"
+        include "firebase-config.js"
+        include "manifest.webmanifest"
+        include "sw.js"
+    }
+    into(webAssetsDir.map { it.dir("site") })
+}
+
+preBuild.dependsOn("syncWebAssets")

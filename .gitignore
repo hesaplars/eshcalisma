@@ -1,0 +1,13 @@
+.firebase/
+.tmp-sdk-test/
+
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+android-app/local.properties
+
+*.log
+firebase-debug.log
+firestore-debug.log
+
+node_modules/
