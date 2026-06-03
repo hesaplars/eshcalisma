@@ -71,9 +71,18 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient());
 
         if (savedInstanceState == null) {
-            webView.loadUrl(HOME_URL);
+            webView.loadUrl(urlFromIntent(getIntent()));
         } else {
             webView.restoreState(savedInstanceState);
+        }
+    }
+
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (webView != null) {
+            webView.loadUrl(urlFromIntent(intent));
         }
     }
 
@@ -131,6 +140,13 @@ public class MainActivity extends Activity {
     private int getColorResource(String name) {
         int id = getResources().getIdentifier(name, "color", getPackageName());
         return id == 0 ? 0xff0d1f2d : getResources().getColor(id);
+    }
+
+    private String urlFromIntent(android.content.Intent intent) {
+        String targetHash = intent == null ? "" : intent.getStringExtra("targetHash");
+        if (targetHash == null || targetHash.trim().isEmpty()) return HOME_URL;
+        if (!targetHash.startsWith("#")) targetHash = "#" + targetHash;
+        return HOME_URL + targetHash;
     }
 
     private void createNotificationChannel() {

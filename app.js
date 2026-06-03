@@ -1542,6 +1542,7 @@ function init() {
   // Personel paneli mobilde varsayılan kapalı - mobile-panel-open eklenmez
   setupNotifications();
   clearPersonForm();
+  setTimeout(applyLaunchHash, 250);
   setupFirebaseSync();
 }
 
@@ -1972,6 +1973,18 @@ function switchView(view) {
   if (view === "dashboard") $("viewTitle").textContent = activeWorkspace === "personal" ? (personalState.settings.areaTitle || "Kişisel Alan") : "Ana Sayfa";
   renderWorkspaceChrome();
   renderSimplifiedViewMode();
+}
+
+function applyLaunchHash() {
+  const hash = decodeURIComponent(location.hash || "");
+  const match = hash.match(/^#(dashboard|personal):(\d{4}-\d{2}-\d{2})$/);
+  if (!match) return;
+  const [, target, dateKey] = match;
+  activeDate = dateKey;
+  if ($("dashboardDate")) $("dashboardDate").value = dateKey;
+  if ($("personalTodoDate")) $("personalTodoDate").value = dateKey;
+  setWorkspaceScope(target === "personal" ? "personal" : "common", "dashboard");
+  history.replaceState(null, "", location.pathname + location.search);
 }
 
 function setupWeekdayPicker() {
@@ -4716,17 +4729,21 @@ function androidNotificationSnapshot() {
   }
   const commonCritical = commonRemaining.filter((task) => task.priority === "critical" || task.mustDo).length;
   const personalRemaining = (personalState.todos || []).filter((todo) => !todo.done && todo.dueDate <= today);
+  const commonCount = commonRemaining.length;
+  const personalCount = personalRemaining.length;
   return {
     enabled: Boolean(settings.androidNotificationsEnabled),
     commonEnabled: Boolean(settings.commonNotificationsEnabled),
     personalEnabled: Boolean(settings.personalNotificationsEnabled),
+    targetDate: today,
+    targetScope: commonCount ? "common" : (personalCount ? "personal" : "common"),
     criticalMinutes: Math.max(1, Number(settings.criticalNotifyMinutes) || 15),
     normalMinutes: Math.max(1, Number(settings.normalNotifyMinutes) || 30),
     quietStart: settings.quietStart,
     quietEnd: settings.quietEnd,
     commonCritical,
-    commonNormal: Math.max(0, commonRemaining.length - commonCritical),
-    personalCount: personalRemaining.length,
+    commonNormal: Math.max(0, commonCount - commonCritical),
+    personalCount,
     personalOverdue: personalRemaining.filter((todo) => todo.dueDate < today).length,
     updatedAt: new Date().toISOString()
   };

@@ -87,11 +87,11 @@ public class NotificationReceiver extends BroadcastReceiver {
             int critical = config.optInt("commonCritical", 0);
             int normal = config.optInt("commonNormal", 0);
             if (critical > 0 && (forceDiagnostic || shouldSend(prefs, KEY_COMMON_CRITICAL_SENT, config.optInt("criticalMinutes", 15), now))) {
-                notify(context, NOTIFICATION_COMMON_CRITICAL, "Ortak alan kritik gorevler bekliyor", "Bugun tamamlanmamis " + critical + " kritik/mutlaka gorev var.");
+                notify(context, NOTIFICATION_COMMON_CRITICAL, "Ortak alan kritik gorevler bekliyor", "Bugun tamamlanmamis " + critical + " kritik/mutlaka gorev var.", targetHash(config, "common"));
                 sent++;
             }
             if (normal > 0 && (forceDiagnostic || shouldSend(prefs, KEY_COMMON_NORMAL_SENT, config.optInt("normalMinutes", 30), now))) {
-                notify(context, NOTIFICATION_COMMON_NORMAL, "Ortak alan gorevleri tamamlanmadi", "Bugun tamamlanmamis " + (critical + normal) + " ortak gorev var." + (critical > 0 ? " Kritik: " + critical : ""));
+                notify(context, NOTIFICATION_COMMON_NORMAL, "Ortak alan gorevleri tamamlanmadi", "Bugun tamamlanmamis " + (critical + normal) + " ortak gorev var." + (critical > 0 ? " Kritik: " + critical : ""), targetHash(config, "common"));
                 sent++;
             }
         }
@@ -100,7 +100,7 @@ public class NotificationReceiver extends BroadcastReceiver {
             int personal = config.optInt("personalCount", 0);
             int overdue = config.optInt("personalOverdue", 0);
             if (personal > 0 && (forceDiagnostic || shouldSend(prefs, KEY_PERSONAL_SENT, config.optInt("normalMinutes", 30), now))) {
-                notify(context, NOTIFICATION_PERSONAL, "Kisisel yapilacaklar bekliyor", personal + " kisisel is acik." + (overdue > 0 ? " Geciken: " + overdue : ""));
+                notify(context, NOTIFICATION_PERSONAL, "Kisisel yapilacaklar bekliyor", personal + " kisisel is acik." + (overdue > 0 ? " Geciken: " + overdue : ""), targetHash(config, "personal"));
                 sent++;
             }
         }
@@ -180,9 +180,21 @@ public class NotificationReceiver extends BroadcastReceiver {
         return value == null || value.trim().isEmpty();
     }
 
+    private static String targetHash(JSONObject config, String fallbackScope) {
+        String date = config.optString("targetDate", "");
+        String scope = config.optString("targetScope", fallbackScope);
+        if (empty(date)) return "";
+        return ("personal".equals(scope) ? "#personal:" : "#dashboard:") + date;
+    }
+
     private static void notify(Context context, int id, String title, String body) {
+        notify(context, id, title, body, "");
+    }
+
+    private static void notify(Context context, int id, String title, String body, String targetHash) {
         Intent openIntent = new Intent(context, MainActivity.class);
         openIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        if (!empty(targetHash)) openIntent.putExtra("targetHash", targetHash);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
         PendingIntent contentIntent = PendingIntent.getActivity(context, id, openIntent, flags);
